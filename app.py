@@ -20,6 +20,13 @@ if uploaded_file is not None:
 
         processed_df = process_file(uploaded_file)
 
+        st.subheader("Data Preview")
+
+        st.write("Total Rows:", len(processed_df))
+        st.write("Total Columns:", len(processed_df.columns))
+
+        st.dataframe(processed_df.head(10))
+
         output = BytesIO()
 
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
