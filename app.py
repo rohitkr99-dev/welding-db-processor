@@ -9,7 +9,7 @@ st.title("Welding DB Processor")
 
 uploaded_file = st.file_uploader(
     "Upload Welding DB File",
-    type=["xlsb"]
+    type=["xlsb", "xlsx"]
 )
 
 if uploaded_file is not None:
