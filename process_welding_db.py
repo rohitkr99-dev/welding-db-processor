@@ -1,23 +1,17 @@
 import pandas as pd
 
-print("Welding DB Processor Started")
 
-INPUT_FILE = "input/Welding DB.xlsb"
+def process_file(uploaded_file):
 
-try:
+    # Read XLSB file
     df = pd.read_excel(
-        INPUT_FILE,
+        uploaded_file,
         sheet_name=0,
         engine="pyxlsb"
     )
 
-    print("File Loaded Successfully")
-    print("Total Rows:", len(df))
-    print("Columns Found:")
+    # Example processing columns
+    df["Match_Status"] = ""
+    df["Remarks"] = ""
 
-    for col in df.columns:
-        print("-", col)
-
-except Exception as e:
-    print("ERROR:")
-    print(e)
+    return df
