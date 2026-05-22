@@ -18,8 +18,12 @@ if uploaded_file is not None:
 
     if st.button("Process File"):
 
+        # Process File
         processed_df = process_file(uploaded_file)
 
+        # -----------------------------
+        # Data Preview
+        # -----------------------------
         st.subheader("Data Preview")
 
         st.write("Total Rows:", len(processed_df))
@@ -27,9 +31,57 @@ if uploaded_file is not None:
 
         st.dataframe(processed_df.head(10))
 
+        # -----------------------------
+        # Column Names
+        # -----------------------------
+        st.subheader("Column Names")
+
+        for col in processed_df.columns:
+            st.write(col)
+
+        # -----------------------------
+        # Validation Summary
+        # -----------------------------
+        st.subheader("Validation Summary")
+
+        total_rows = len(processed_df)
+
+        pass_count = (
+            processed_df["Validation_Status"]
+            .eq("PASS")
+            .sum()
+        )
+
+        fail_count = (
+            processed_df["Validation_Status"]
+            .eq("FAIL")
+            .sum()
+        )
+
+        duplicate_count = (
+            processed_df["Duplicate_Flag"]
+            .eq("YES")
+            .sum()
+        )
+
+        st.write("Total Rows:", total_rows)
+        st.write("PASS Records:", pass_count)
+        st.write("FAIL Records:", fail_count)
+        st.write(
+            "Duplicate Barcode Records:",
+            duplicate_count
+        )
+
+        # -----------------------------
+        # Download Output File
+        # -----------------------------
         output = BytesIO()
 
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        with pd.ExcelWriter(
+            output,
+            engine="openpyxl"
+        ) as writer:
+
             processed_df.to_excel(
                 writer,
                 index=False,
