@@ -1,93 +1,275 @@
 import pandas as pd
+import numpy as np
 
 
-def process_file(uploaded_file):
+def process_file(welding_file, id_base_file):
 
-    file_name = uploaded_file.name.lower()
+    # ---------------------------------
+    # READ WELDING FILE
+    # ---------------------------------
 
-    # Read XLSB File
-    if file_name.endswith(".xlsb"):
+    welding_name = welding_file.name.lower()
 
-        df = pd.read_excel(
-            uploaded_file,
+    if welding_name.endswith(".xlsb"):
+
+        welding_df = pd.read_excel(
+            welding_file,
             sheet_name=0,
             engine="pyxlsb"
         )
 
-    # Read XLSX File
-    elif file_name.endswith(".xlsx"):
+    else:
 
-        df = pd.read_excel(
-            uploaded_file,
+        welding_df = pd.read_excel(
+            welding_file,
             sheet_name=0,
             engine="openpyxl"
         )
 
-    else:
-        raise ValueError("Unsupported file format")
+    welding_df.columns = welding_df.columns.str.strip()
 
-    # Clean Column Names
-    df.columns = df.columns.str.strip()
+    # ---------------------------------
+    # READ ID BASE FILE
+    # ---------------------------------
 
-    # Create Validation Columns
-    df["Validation_Status"] = "PASS"
-    df["Validation_Remarks"] = ""
+    id_name = id_base_file.name.lower()
 
-    # -----------------------------
-    # Missing Welder1 Check
-    # -----------------------------
-    if "Welder1" in df.columns:
+    if id_name.endswith(".xlsb"):
 
-        welder_missing = (
-            df["Welder1"].isna()
-        )
-
-        df.loc[
-            welder_missing,
-            "Validation_Status"
-        ] = "FAIL"
-
-        df.loc[
-            welder_missing,
-            "Validation_Remarks"
-        ] += "Missing Welder1; "
-
-    # -----------------------------
-    # Missing WPS No. Check
-    # -----------------------------
-    if "WPS No." in df.columns:
-
-        wps_missing = (
-            df["WPS No."].isna()
-        )
-
-        df.loc[
-            wps_missing,
-            "Validation_Status"
-        ] = "FAIL"
-
-        df.loc[
-            wps_missing,
-            "Validation_Remarks"
-        ] += "Missing WPS No.; "
-
-    # -----------------------------
-    # Duplicate Barcode Check
-    # -----------------------------
-    if "Barcode" in df.columns:
-
-        duplicate_barcode = (
-            df["Barcode"].duplicated(keep=False)
-        )
-
-        df["Duplicate_Flag"] = duplicate_barcode.map(
-            {
-                True: "YES",
-                False: "NO"
-            }
+        id_df = pd.read_excel(
+            id_base_file,
+            sheet_name="WEIGHT CALCULATION (2)",
+            header=None,
+            engine="pyxlsb"
         )
 
     else:
-        df["Duplicate_Flag"] = "COLUMN NOT FOUND"
 
-    return df
+        id_df = pd.read_excel(
+            id_base_file,
+            sheet_name="WEIGHT CALCULATION (2)",
+            header=None,
+            engine="openpyxl"
+        )
+
+    # ---------------------------------
+    # OUTPUT COLUMNS
+    # ---------------------------------
+
+    welding_df["Final Weight"] = np.nan
+    welding_df["Match Type"] = ""
+    welding_df["Schedule 10 Thickness"] = np.nan
+    welding_df["Schedule 10 Weight"] = np.nan
+
+    # ---------------------------------
+    # BUILD INCH DIA MAP
+    # ---------------------------------
+
+    inch_map = {}
+
+    for idx in range(len(id_df)):
+
+        value = id_df.iloc[idx, 0]
+
+        try:
+            inch_value = float(value)
+
+            inch_map[inch_value] = idx
+
+        except:
+            pass
+
+    available_inches = sorted(inch_map.keys())
+
+    # ---------------------------------
+    # PROCESS EACH ROW
+    # ---------------------------------
+
+    for row_idx in welding_df.index:
+
+        try:
+
+            inch_dia = float(
+                welding_df.iloc[row_idx, 34]
+            )
+
+            thickness = float(
+                welding_df.iloc[row_idx, 37]
+            )
+
+        except:
+            continue
+
+        # -----------------------------
+        # FIND MATCHED INCH DIA
+        # -----------------------------
+
+        matched_inch = None
+        nearest_higher_used = False
+
+        for inch in available_inches:
+
+            if inch >= inch_dia:
+
+                matched_inch = inch
+
+                if inch != inch_dia:
+                    nearest_higher_used = True
+
+                break
+
+        if matched_inch is None:
+            continue
+
+        base_row = inch_map[matched_inch]
+
+        thickness_row = id_df.iloc[base_row]
+        weight_row = id_df.iloc[base_row + 1]
+
+        # -----------------------------
+        # FIND THICKNESS MATCH
+        # -----------------------------
+
+        matched_weight = None
+        match_type = ""
+
+        thickness_candidates = []
+
+        for col_idx in range(1, len(thickness_row)):
+
+            t_value = thickness_row.iloc[col_idx]
+
+            w_value = weight_row.iloc[col_idx]
+
+            try:
+
+                t_value = float(t_value)
+
+                thickness_candidates.append(
+                    (
+                        t_value,
+                        w_value,
+                        col_idx
+                    )
+                )
+
+            except:
+                pass
+
+        thickness_candidates.sort(key=lambda x: x[0])
+
+        exact_found = False
+
+        for t_value, w_value, col_idx in thickness_candidates:
+
+            if t_value == thickness:
+
+                matched_weight = float(w_value)
+
+                match_type = "exact match"
+
+                exact_found = True
+
+                break
+
+        # -----------------------------
+        # NEAREST HIGHER THICKNESS
+        # -----------------------------
+
+        if not exact_found:
+
+            for t_value, w_value, col_idx in thickness_candidates:
+
+                if t_value > thickness:
+
+                    matched_weight = float(w_value)
+
+                    match_type = "nearest higher thickness"
+
+                    exact_found = True
+
+                    break
+
+        # -----------------------------
+        # CALCULATED FIELD
+        # -----------------------------
+
+        if not exact_found:
+
+            max_thickness = thickness_candidates[-1][0]
+            max_weight = float(
+                thickness_candidates[-1][1]
+            )
+
+            matched_weight = (
+                max_weight / max_thickness
+            ) * thickness
+
+            matched_weight = round(
+                matched_weight,
+                2
+            )
+
+            match_type = "calculated field"
+
+        # -----------------------------
+        # OVERRIDE MATCH TYPE
+        # -----------------------------
+
+        if nearest_higher_used:
+
+            match_type = "nearest higher Inch Dia"
+
+        # -----------------------------
+        # SCHEDULE 10 LOGIC
+        # -----------------------------
+
+        schedule10_thickness = thickness_row.iloc[3]
+        schedule10_weight = weight_row.iloc[3]
+
+        try:
+
+            schedule10_thickness = float(
+                schedule10_thickness
+            )
+
+            schedule10_weight = float(
+                schedule10_weight
+            )
+
+        except:
+
+            schedule10_thickness = 6
+
+            schedule10_weight = round(
+                (
+                    matched_weight / thickness
+                ) * 6,
+                2
+            )
+
+        # -----------------------------
+        # WRITE OUTPUT
+        # -----------------------------
+
+        welding_df.at[
+            row_idx,
+            "Final Weight"
+        ] = round(matched_weight, 2)
+
+        welding_df.at[
+            row_idx,
+            "Match Type"
+        ] = match_type
+
+        welding_df.at[
+            row_idx,
+            "Schedule 10 Thickness"
+        ] = schedule10_thickness
+
+        welding_df.at[
+            row_idx,
+            "Schedule 10 Weight"
+        ] = schedule10_weight
+
+    return welding_df
