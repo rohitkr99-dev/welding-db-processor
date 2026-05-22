@@ -2,7 +2,10 @@ import pandas as pd
 import numpy as np
 
 
-def process_file(welding_file, id_base_file):
+MASTER_FILE = "master/ID_BASE_WEIGHT_CALCULATION.xlsx"
+
+
+def process_file(welding_file):
 
     # ---------------------------------
     # READ WELDING FILE
@@ -29,28 +32,15 @@ def process_file(welding_file, id_base_file):
     welding_df.columns = welding_df.columns.str.strip()
 
     # ---------------------------------
-    # READ ID BASE FILE
+    # READ MASTER FILE
     # ---------------------------------
 
-    id_name = id_base_file.name.lower()
-
-    if id_name.endswith(".xlsb"):
-
-        id_df = pd.read_excel(
-            id_base_file,
-            sheet_name=0,
-            header=None,
-            engine="pyxlsb"
-        )
-
-    else:
-
-        id_df = pd.read_excel(
-            id_base_file,
-            sheet_name=0,
-            header=None,
-            engine="openpyxl"
-        )
+    id_df = pd.read_excel(
+        MASTER_FILE,
+        sheet_name=0,
+        header=None,
+        engine="openpyxl"
+    )
 
     # ---------------------------------
     # OUTPUT COLUMNS
@@ -80,7 +70,9 @@ def process_file(welding_file, id_base_file):
         except:
             pass
 
-    available_inches = sorted(inch_map.keys())
+    available_inches = sorted(
+        inch_map.keys()
+    )
 
     # ---------------------------------
     # PROCESS EACH ROW
@@ -126,8 +118,13 @@ def process_file(welding_file, id_base_file):
 
         base_row = inch_map[matched_inch]
 
-        thickness_row = id_df.iloc[base_row]
-        weight_row = id_df.iloc[base_row + 1]
+        thickness_row = id_df.iloc[
+            base_row
+        ]
+
+        weight_row = id_df.iloc[
+            base_row + 1
+        ]
 
         # ---------------------------------
         # BUILD THICKNESS LIST
@@ -135,10 +132,18 @@ def process_file(welding_file, id_base_file):
 
         thickness_candidates = []
 
-        for col_idx in range(1, len(thickness_row)):
+        for col_idx in range(
+            1,
+            len(thickness_row)
+        ):
 
-            t_value = thickness_row.iloc[col_idx]
-            w_value = weight_row.iloc[col_idx]
+            t_value = thickness_row.iloc[
+                col_idx
+            ]
+
+            w_value = weight_row.iloc[
+                col_idx
+            ]
 
             try:
 
@@ -167,16 +172,21 @@ def process_file(welding_file, id_base_file):
         match_type = ""
 
         # ---------------------------------
-        # EXACT THICKNESS MATCH
+        # EXACT MATCH
         # ---------------------------------
 
         exact_found = False
 
-        for t_value, w_value, col_idx in thickness_candidates:
+        for (
+            t_value,
+            w_value,
+            col_idx
+        ) in thickness_candidates:
 
             if t_value == thickness:
 
                 matched_weight = w_value
+
                 match_type = "exact match"
 
                 exact_found = True
@@ -189,12 +199,19 @@ def process_file(welding_file, id_base_file):
 
         if not exact_found:
 
-            for t_value, w_value, col_idx in thickness_candidates:
+            for (
+                t_value,
+                w_value,
+                col_idx
+            ) in thickness_candidates:
 
                 if t_value > thickness:
 
                     matched_weight = w_value
-                    match_type = "nearest higher thickness"
+
+                    match_type = (
+                        "nearest higher thickness"
+                    )
 
                     exact_found = True
 
@@ -206,8 +223,13 @@ def process_file(welding_file, id_base_file):
 
         if not exact_found:
 
-            max_thickness = thickness_candidates[-1][0]
-            max_weight = thickness_candidates[-1][1]
+            max_thickness = (
+                thickness_candidates[-1][0]
+            )
+
+            max_weight = (
+                thickness_candidates[-1][1]
+            )
 
             matched_weight = (
                 max_weight / max_thickness
@@ -218,7 +240,9 @@ def process_file(welding_file, id_base_file):
                 2
             )
 
-            match_type = "calculated field"
+            match_type = (
+                "calculated field"
+            )
 
         # ---------------------------------
         # OVERRIDE MATCH TYPE
@@ -226,15 +250,22 @@ def process_file(welding_file, id_base_file):
 
         if nearest_higher_used:
 
-            match_type = "nearest higher Inch Dia"
+            match_type = (
+                "nearest higher Inch Dia"
+            )
 
         # ---------------------------------
         # SCHEDULE 10 LOGIC
         # COLUMN D = INDEX 3
         # ---------------------------------
 
-        schedule10_thickness = thickness_row.iloc[3]
-        schedule10_weight = weight_row.iloc[3]
+        schedule10_thickness = (
+            thickness_row.iloc[3]
+        )
+
+        schedule10_weight = (
+            weight_row.iloc[3]
+        )
 
         try:
 
