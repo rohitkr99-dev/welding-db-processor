@@ -13,33 +13,21 @@ st.title("Welding DB Weight Processor")
 
 welding_file = st.file_uploader(
     "Upload Welding DB File",
-    type=["xlsb", "xlsx"],
-    key="welding"
+    type=["xlsb", "xlsx"]
 )
 
 # ---------------------------------
-# Upload ID Base File
+# Process File
 # ---------------------------------
 
-id_base_file = st.file_uploader(
-    "Upload ID BASE WEIGHT CALCULATION File",
-    type=["xlsb", "xlsx"],
-    key="idbase"
-)
+if welding_file is not None:
 
-# ---------------------------------
-# Process
-# ---------------------------------
-
-if welding_file is not None and id_base_file is not None:
-
-    st.success("Both files uploaded successfully")
+    st.success("File uploaded successfully")
 
     if st.button("Process File"):
 
         processed_df = process_file(
-            welding_file,
-            id_base_file
+            welding_file
         )
 
         # ---------------------------------
@@ -51,11 +39,6 @@ if welding_file is not None and id_base_file is not None:
         st.write(
             "Total Rows:",
             len(processed_df)
-        )
-
-        st.write(
-            "Total Columns:",
-            len(processed_df.columns)
         )
 
         st.dataframe(
