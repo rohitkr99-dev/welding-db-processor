@@ -7,7 +7,7 @@ MASTER_SHEET = "WEIGHT CALCULATION (2)"
 
 
 # ---------------------------------------------------
-# SAFE FLOAT CONVERSION
+# SAFE FLOAT
 # ---------------------------------------------------
 
 def safe_float(value):
@@ -27,11 +27,12 @@ def safe_float(value):
         return float(value)
 
     except:
+
         return None
 
 
 # ---------------------------------------------------
-# FIND NEAREST HIGHER INCH DIA
+# NEAREST HIGHER INCH DIA
 # ---------------------------------------------------
 
 def get_nearest_higher_dia(
@@ -48,7 +49,7 @@ def get_nearest_higher_dia(
 
 
 # ---------------------------------------------------
-# PROCESS FILE
+# MAIN PROCESS
 # ---------------------------------------------------
 
 def process_file(welding_file):
@@ -67,20 +68,18 @@ def process_file(welding_file):
             header=None,
             engine="pyxlsb"
         )
-        )
 
     else:
 
-         welding_df = pd.read_excel(
+        welding_df = pd.read_excel(
             welding_file,
             sheet_name=0,
             header=None,
             engine="openpyxl"
         )
-        )
 
-        # ---------------------------------------------------
-    # AUTO DETECT HEADER ROW
+    # ---------------------------------------------------
+    # DETECT HEADER ROW
     # ---------------------------------------------------
 
     header_row = None
@@ -106,7 +105,9 @@ def process_file(welding_file):
             "Could not detect header row"
         )
 
+    # ---------------------------------------------------
     # SET HEADERS
+    # ---------------------------------------------------
 
     welding_df.columns = welding_df.iloc[
         header_row
@@ -121,17 +122,10 @@ def process_file(welding_file):
         for col in welding_df.columns
     ]
 
-    print("DETECTED HEADERS:")
+    print("HEADERS DETECTED:")
     print(welding_df.columns.tolist())
 
     # ---------------------------------------------------
-    # DYNAMIC COLUMN DETECTION
-    # ---------------------------------------------------
-
-    inch_col = None
-    thickness_col = None
-
-        # ---------------------------------------------------
     # FLEXIBLE COLUMN DETECTION
     # ---------------------------------------------------
 
@@ -142,10 +136,6 @@ def process_file(welding_file):
 
         col_name = str(col).strip().lower()
 
-        # DEBUG PRINT
-        print("COLUMN FOUND:", col_name)
-
-        # INCH DIA DETECTION
         if (
             "inch" in col_name
             and
@@ -154,37 +144,23 @@ def process_file(welding_file):
 
             inch_col = col
 
-        # THICKNESS DETECTION
-        if (
-            "thickness" in col_name
-        ):
+        if "thickness" in col_name:
 
             thickness_col = col
 
-    # DEBUG OUTPUT
     print("Detected Inch Dia Column:", inch_col)
     print("Detected Thickness Column:", thickness_col)
 
     if inch_col is None:
 
         raise Exception(
-            f"""
-            Inch Dia column not found.
-
-            Available columns:
-            {list(welding_df.columns)}
-            """
+            f"Inch Dia column not found. Columns: {list(welding_df.columns)}"
         )
 
     if thickness_col is None:
 
         raise Exception(
-            f"""
-            Thickness column not found.
-
-            Available columns:
-            {list(welding_df.columns)}
-            """
+            f"Thickness column not found. Columns: {list(welding_df.columns)}"
         )
 
     # ---------------------------------------------------
@@ -200,7 +176,6 @@ def process_file(welding_file):
 
     # ---------------------------------------------------
     # BUILD MASTER LOOKUP
-    # ONLY ROWS WHERE COLUMN C = Thick.
     # ---------------------------------------------------
 
     inch_map = {}
@@ -227,7 +202,6 @@ def process_file(welding_file):
 
     # ---------------------------------------------------
     # GLOBAL LOWEST THICKNESS
-    # FOR FALLBACK FORMULA
     # ---------------------------------------------------
 
     all_pairs = []
@@ -237,6 +211,7 @@ def process_file(welding_file):
         row_idx = inch_map[dia]
 
         thickness_row = id_df.iloc[row_idx]
+
         weight_row = id_df.iloc[row_idx + 1]
 
         for col_idx in range(3, 16):
@@ -255,9 +230,7 @@ def process_file(welding_file):
                 w is not None
             ):
 
-                all_pairs.append(
-                    (t, w)
-                )
+                all_pairs.append((t, w))
 
     lowest_pair = min(
         all_pairs,
@@ -265,6 +238,7 @@ def process_file(welding_file):
     )
 
     global_low_thickness = lowest_pair[0]
+
     global_low_weight = lowest_pair[1]
 
     fallback_weight = (
@@ -283,7 +257,7 @@ def process_file(welding_file):
     welding_df["Column D Weight"] = np.nan
 
     # ---------------------------------------------------
-    # PROCESS ROWS
+    # PROCESS EACH ROW
     # ---------------------------------------------------
 
     for row_idx in welding_df.index:
@@ -368,7 +342,7 @@ def process_file(welding_file):
                 continue
 
             # ---------------------------------------------------
-            # GET THICKNESS ROWS
+            # GET MASTER ROWS
             # ---------------------------------------------------
 
             base_row = inch_map[
@@ -385,7 +359,6 @@ def process_file(welding_file):
 
             # ---------------------------------------------------
             # BUILD THICKNESS-WEIGHT PAIRS
-            # ONLY D:P
             # ---------------------------------------------------
 
             pairs = []
@@ -406,12 +379,7 @@ def process_file(welding_file):
                     w is not None
                 ):
 
-                    pairs.append(
-                        (
-                            t,
-                            w
-                        )
-                    )
+                    pairs.append((t, w))
 
             pairs.sort(
                 key=lambda x: x[0]
@@ -464,7 +432,7 @@ def process_file(welding_file):
                 else:
 
                     # ---------------------------------------------------
-                    # CALCULATED
+                    # CALCULATED VALUE
                     # ---------------------------------------------------
 
                     highest = max(
@@ -543,7 +511,6 @@ def process_file(welding_file):
 
     # ---------------------------------------------------
     # FINAL VALIDATION
-    # NO BLANKS ALLOWED
     # ---------------------------------------------------
 
     for row_idx in welding_df.index:
