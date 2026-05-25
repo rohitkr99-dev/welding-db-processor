@@ -3,7 +3,7 @@ import numpy as np
 
 
 MASTER_FILE = "master/ID_BASE_WEIGHT_CALCULATION.xlsx"
-MASTER_SHEET = "WEIGHT CALCULATION (2)"
+
 
 
 # ---------------------------------------------------
@@ -169,9 +169,23 @@ def process_file(welding_file):
     # READ MASTER FILE
     # ---------------------------------------------------
 
+        # ---------------------------------------------------
+    # AUTO DETECT MASTER SHEET
+    # ---------------------------------------------------
+
+    excel_file = pd.ExcelFile(
+        MASTER_FILE,
+        engine="openpyxl"
+    )
+
+    print("MASTER SHEETS:")
+    print(excel_file.sheet_names)
+
+    master_sheet = excel_file.sheet_names[0]
+
     id_df = pd.read_excel(
         MASTER_FILE,
-        sheet_name=MASTER_SHEET,
+        sheet_name=master_sheet,
         header=None,
         engine="openpyxl"
     )
