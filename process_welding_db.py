@@ -6,6 +6,10 @@ MASTER_FILE = "master/ID_BASE_WEIGHT_CALCULATION.xlsx"
 MASTER_SHEET = "WEIGHT CALCULATION (2)"
 
 
+# ---------------------------------------------------
+# SAFE FLOAT CONVERSION
+# ---------------------------------------------------
+
 def safe_float(value):
 
     try:
@@ -26,11 +30,32 @@ def safe_float(value):
         return None
 
 
+# ---------------------------------------------------
+# FIND NEAREST HIGHER INCH DIA
+# ---------------------------------------------------
+
+def get_nearest_higher_dia(
+    available_inches,
+    target
+):
+
+    for dia in available_inches:
+
+        if dia >= target:
+            return dia
+
+    return None
+
+
+# ---------------------------------------------------
+# PROCESS FILE
+# ---------------------------------------------------
+
 def process_file(welding_file):
 
-    # ---------------------------------
-    # READ WELDING FILE
-    # ---------------------------------
+    # ---------------------------------------------------
+    # READ INPUT FILE
+    # ---------------------------------------------------
 
     welding_name = welding_file.name.lower()
 
@@ -52,9 +77,35 @@ def process_file(welding_file):
 
     welding_df.columns = welding_df.columns.str.strip()
 
-    # ---------------------------------
+    # ---------------------------------------------------
+    # DYNAMIC COLUMN DETECTION
+    # ---------------------------------------------------
+
+    inch_col = None
+    thickness_col = None
+
+    for col in welding_df.columns:
+
+        col_name = str(col).strip().lower()
+
+        if col_name == "inch dia":
+            inch_col = col
+
+        if col_name in [
+            "thickness value",
+            "thickness"
+        ]:
+            thickness_col = col
+
+    if inch_col is None:
+        raise Exception("Inch Dia column not found")
+
+    if thickness_col is None:
+        raise Exception("Thickness column not found")
+
+    # ---------------------------------------------------
     # READ MASTER FILE
-    # ---------------------------------
+    # ---------------------------------------------------
 
     id_df = pd.read_excel(
         MASTER_FILE,
@@ -63,116 +114,178 @@ def process_file(welding_file):
         engine="openpyxl"
     )
 
-    # ---------------------------------
-    # OUTPUT COLUMNS
-    # ---------------------------------
-
-    welding_df["Final Weight"] = np.nan
-    welding_df["Match Type"] = ""
-    welding_df["Schedule 10 Thickness"] = np.nan
-    welding_df["Schedule 10 Weight"] = np.nan
-    welding_df["Data Status / Error Reason"] = ""
-
-    # ---------------------------------
-    # BUILD INCH DIA MAP
-    # ---------------------------------
+    # ---------------------------------------------------
+    # BUILD MASTER LOOKUP
+    # ONLY ROWS WHERE COLUMN C = Thick.
+    # ---------------------------------------------------
 
     inch_map = {}
 
     for idx in range(len(id_df)):
 
-        value = safe_float(
-            id_df.iloc[idx, 0]
-        )
+        marker = str(
+            id_df.iloc[idx, 2]
+        ).strip()
 
-        if value is not None:
+        if marker == "Thick.":
 
-            inch_map[value] = idx
+            inch_val = safe_float(
+                id_df.iloc[idx, 0]
+            )
+
+            if inch_val is not None:
+
+                inch_map[inch_val] = idx
 
     available_inches = sorted(
         inch_map.keys()
     )
 
-    # ---------------------------------
-    # PROCESS EACH ROW
-    # ---------------------------------
+    # ---------------------------------------------------
+    # GLOBAL LOWEST THICKNESS
+    # FOR FALLBACK FORMULA
+    # ---------------------------------------------------
+
+    all_pairs = []
+
+    for dia in available_inches:
+
+        row_idx = inch_map[dia]
+
+        thickness_row = id_df.iloc[row_idx]
+        weight_row = id_df.iloc[row_idx + 1]
+
+        for col_idx in range(3, 16):
+
+            t = safe_float(
+                thickness_row.iloc[col_idx]
+            )
+
+            w = safe_float(
+                weight_row.iloc[col_idx]
+            )
+
+            if (
+                t is not None
+                and
+                w is not None
+            ):
+
+                all_pairs.append(
+                    (t, w)
+                )
+
+    lowest_pair = min(
+        all_pairs,
+        key=lambda x: x[0]
+    )
+
+    global_low_thickness = lowest_pair[0]
+    global_low_weight = lowest_pair[1]
+
+    fallback_weight = (
+        global_low_weight
+        /
+        global_low_thickness
+    ) * 6
+
+    # ---------------------------------------------------
+    # OUTPUT COLUMNS
+    # ---------------------------------------------------
+
+    welding_df["Consumable Weight"] = np.nan
+    welding_df["Data Selection Logic"] = ""
+    welding_df["Column D Thickness"] = np.nan
+    welding_df["Column D Weight"] = np.nan
+
+    # ---------------------------------------------------
+    # PROCESS ROWS
+    # ---------------------------------------------------
 
     for row_idx in welding_df.index:
 
-        error_reason = ""
-
         try:
 
-            # AI = Inch Dia
             inch_dia = safe_float(
-                welding_df.iloc[row_idx, 34]
+                welding_df.at[
+                    row_idx,
+                    inch_col
+                ]
             )
 
-            # AL = Thickness
             thickness = safe_float(
-                welding_df.iloc[row_idx, 37]
+                welding_df.at[
+                    row_idx,
+                    thickness_col
+                ]
             )
-
-            # ---------------------------------
-            # VALIDATION
-            # ---------------------------------
 
             if inch_dia is None:
 
-                error_reason = (
-                    "Inch Dia blank in input file"
-                )
-
                 welding_df.at[
                     row_idx,
-                    "Data Status / Error Reason"
-                ] = error_reason
+                    "Data Selection Logic"
+                ] = "No data available"
 
                 continue
 
             if thickness is None:
 
-                error_reason = (
-                    "Original thickness blank in input file"
-                )
-
                 welding_df.at[
                     row_idx,
-                    "Data Status / Error Reason"
-                ] = error_reason
+                    "Data Selection Logic"
+                ] = "No data available"
 
                 continue
 
-            # ---------------------------------
-            # FIND MATCHED INCH DIA
-            # ---------------------------------
+            # ---------------------------------------------------
+            # FIND MATCHING INCH DIA
+            # ---------------------------------------------------
 
-            matched_inch = None
-            nearest_higher_used = False
+            status_parts = []
 
-            for inch in available_inches:
+            if inch_dia in inch_map:
 
-                if inch >= inch_dia:
+                matched_inch = inch_dia
 
-                    matched_inch = inch
+            else:
 
-                    if inch != inch_dia:
-                        nearest_higher_used = True
+                matched_inch = get_nearest_higher_dia(
+                    available_inches,
+                    inch_dia
+                )
 
-                    break
+                if matched_inch is not None:
+
+                    status_parts.append(
+                        "Higher Inch Dia"
+                    )
 
             if matched_inch is None:
 
-                error_reason = (
-                    "No higher Inch Dia available"
-                )
+                welding_df.at[
+                    row_idx,
+                    "Data Selection Logic"
+                ] = "No data available"
 
                 welding_df.at[
                     row_idx,
-                    "Data Status / Error Reason"
-                ] = error_reason
+                    "Column D Thickness"
+                ] = 6
+
+                welding_df.at[
+                    row_idx,
+                    "Column D Weight"
+                ] = round(
+                    fallback_weight,
+                    4
+                )
 
                 continue
+
+            # ---------------------------------------------------
+            # GET THICKNESS ROWS
+            # ---------------------------------------------------
 
             base_row = inch_map[
                 matched_inch
@@ -186,220 +299,196 @@ def process_file(welding_file):
                 base_row + 1
             ]
 
-            # ---------------------------------
+            # ---------------------------------------------------
             # BUILD THICKNESS-WEIGHT PAIRS
-            # ---------------------------------
+            # ONLY D:P
+            # ---------------------------------------------------
 
-            thickness_candidates = []
+            pairs = []
 
-            for col_idx in range(
-                1,
-                len(thickness_row)
-            ):
+            for col_idx in range(3, 16):
 
-                t_value = safe_float(
+                t = safe_float(
                     thickness_row.iloc[col_idx]
                 )
 
-                w_value = safe_float(
+                w = safe_float(
                     weight_row.iloc[col_idx]
                 )
 
                 if (
-                    t_value is not None
+                    t is not None
                     and
-                    w_value is not None
+                    w is not None
                 ):
 
-                    thickness_candidates.append(
+                    pairs.append(
                         (
-                            t_value,
-                            w_value,
-                            col_idx
+                            t,
+                            w
                         )
                     )
 
-            if len(thickness_candidates) == 0:
-
-                error_reason = (
-                    "No valid thickness-weight pair found"
-                )
-
-                welding_df.at[
-                    row_idx,
-                    "Data Status / Error Reason"
-                ] = error_reason
-
-                continue
-
-            thickness_candidates.sort(
+            pairs.sort(
                 key=lambda x: x[0]
             )
 
-            matched_weight = None
-            match_type = ""
+            final_weight = None
 
-            # ---------------------------------
+            # ---------------------------------------------------
             # EXACT MATCH
-            # ---------------------------------
+            # ---------------------------------------------------
 
-            exact_found = False
+            exact_match = next(
+                (
+                    p for p in pairs
+                    if abs(p[0] - thickness) < 0.0001
+                ),
+                None
+            )
 
-            for (
-                t_value,
-                w_value,
-                col_idx
-            ) in thickness_candidates:
+            if exact_match:
 
-                if abs(t_value - thickness) < 0.0001:
+                final_weight = exact_match[1]
 
-                    matched_weight = w_value
-
-                    match_type = "exact match"
-
-                    exact_found = True
-
-                    break
-
-            # ---------------------------------
-            # NEAREST HIGHER THICKNESS
-            # ---------------------------------
-
-            if not exact_found:
-
-                for (
-                    t_value,
-                    w_value,
-                    col_idx
-                ) in thickness_candidates:
-
-                    if t_value > thickness:
-
-                        matched_weight = w_value
-
-                        match_type = (
-                            "nearest higher thickness"
-                        )
-
-                        exact_found = True
-
-                        break
-
-            # ---------------------------------
-            # CALCULATED FIELD
-            # ---------------------------------
-
-            if not exact_found:
-
-                max_thickness = (
-                    thickness_candidates[-1][0]
+                status_parts.append(
+                    "Direct Match"
                 )
 
-                max_weight = (
-                    thickness_candidates[-1][1]
+            else:
+
+                # ---------------------------------------------------
+                # HIGHER THICKNESS
+                # ---------------------------------------------------
+
+                higher_match = next(
+                    (
+                        p for p in pairs
+                        if p[0] > thickness
+                    ),
+                    None
                 )
 
-                if max_thickness == 0:
+                if higher_match:
 
-                    error_reason = (
-                        "Calculation failed"
+                    final_weight = higher_match[1]
+
+                    status_parts.append(
+                        "Higher Thickness"
                     )
 
-                    welding_df.at[
-                        row_idx,
-                        "Data Status / Error Reason"
-                    ] = error_reason
+                else:
 
-                    continue
+                    # ---------------------------------------------------
+                    # CALCULATED
+                    # ---------------------------------------------------
 
-                matched_weight = (
-                    max_weight / max_thickness
-                ) * thickness
+                    highest = max(
+                        pairs,
+                        key=lambda x: x[0]
+                    )
 
-                matched_weight = round(
-                    matched_weight,
-                    2
-                )
+                    final_weight = (
+                        highest[1]
+                        /
+                        highest[0]
+                    ) * thickness
 
-                match_type = (
-                    "calculated field"
-                )
+                    status_parts.append(
+                        "Calculated Data"
+                    )
 
-            # ---------------------------------
-            # OVERRIDE MATCH TYPE
-            # ---------------------------------
+            # ---------------------------------------------------
+            # COLUMN D LOGIC
+            # ---------------------------------------------------
 
-            if nearest_higher_used:
-
-                match_type = (
-                    "nearest higher Inch Dia"
-                )
-
-            # ---------------------------------
-            # SCHEDULE 10 LOGIC
-            # COLUMN D ONLY
-            # ---------------------------------
-
-            schedule10_thickness = safe_float(
+            d_thickness = safe_float(
                 thickness_row.iloc[3]
             )
 
-            schedule10_weight = safe_float(
+            d_weight = safe_float(
                 weight_row.iloc[3]
             )
 
-            if (
-                schedule10_thickness is None
-                or
-                schedule10_weight is None
-            ):
+            if d_thickness is None:
 
-                schedule10_thickness = 6
+                d_thickness = 6
 
-                schedule10_weight = round(
-                    (
-                        matched_weight / thickness
-                    ) * 6,
-                    2
-                )
+            if d_weight is None:
 
-            # ---------------------------------
+                d_weight = fallback_weight
+
+            # ---------------------------------------------------
             # WRITE OUTPUT
-            # ---------------------------------
+            # ---------------------------------------------------
 
             welding_df.at[
                 row_idx,
-                "Final Weight"
+                "Consumable Weight"
             ] = round(
-                matched_weight,
-                2
+                final_weight,
+                4
             )
 
             welding_df.at[
                 row_idx,
-                "Match Type"
-            ] = match_type
+                "Data Selection Logic"
+            ] = " + ".join(
+                status_parts
+            )
 
             welding_df.at[
                 row_idx,
-                "Schedule 10 Thickness"
-            ] = schedule10_thickness
+                "Column D Thickness"
+            ] = d_thickness
 
             welding_df.at[
                 row_idx,
-                "Schedule 10 Weight"
-            ] = schedule10_weight
-
-            welding_df.at[
-                row_idx,
-                "Data Status / Error Reason"
-            ] = "SUCCESS"
+                "Column D Weight"
+            ] = round(
+                d_weight,
+                4
+            )
 
         except Exception as e:
 
             welding_df.at[
                 row_idx,
-                "Data Status / Error Reason"
-            ] = f"Calculation failed: {str(e)}"
+                "Data Selection Logic"
+            ] = f"Error: {str(e)}"
+
+    # ---------------------------------------------------
+    # FINAL VALIDATION
+    # NO BLANKS ALLOWED
+    # ---------------------------------------------------
+
+    for row_idx in welding_df.index:
+
+        d_t = welding_df.at[
+            row_idx,
+            "Column D Thickness"
+        ]
+
+        d_w = welding_df.at[
+            row_idx,
+            "Column D Weight"
+        ]
+
+        if pd.isna(d_t):
+
+            welding_df.at[
+                row_idx,
+                "Column D Thickness"
+            ] = 6
+
+        if pd.isna(d_w):
+
+            welding_df.at[
+                row_idx,
+                "Column D Weight"
+            ] = round(
+                fallback_weight,
+                4
+            )
 
     return welding_df
