@@ -119,10 +119,29 @@ def process_file(welding_file):
         header_row + 1:
     ].reset_index(drop=True)
 
-    welding_df.columns = [
-        str(col).strip()
-        for col in welding_df.columns
-    ]
+        # CLEAN COLUMN NAMES
+
+    cleaned_columns = []
+
+    column_count = {}
+
+    for col in welding_df.columns:
+
+        col_name = str(col).strip()
+
+        if col_name in column_count:
+
+            column_count[col_name] += 1
+
+            col_name = f"{col_name}_{column_count[col_name]}"
+
+        else:
+
+            column_count[col_name] = 1
+
+        cleaned_columns.append(col_name)
+
+    welding_df.columns = cleaned_columns
 
     print("HEADERS DETECTED:")
     print(welding_df.columns.tolist())
