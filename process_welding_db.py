@@ -84,24 +84,61 @@ def process_file(welding_file):
     inch_col = None
     thickness_col = None
 
+        # ---------------------------------------------------
+    # FLEXIBLE COLUMN DETECTION
+    # ---------------------------------------------------
+
+    inch_col = None
+    thickness_col = None
+
     for col in welding_df.columns:
 
         col_name = str(col).strip().lower()
 
-        if col_name == "inch dia":
+        # DEBUG PRINT
+        print("COLUMN FOUND:", col_name)
+
+        # INCH DIA DETECTION
+        if (
+            "inch" in col_name
+            and
+            "dia" in col_name
+        ):
+
             inch_col = col
 
-        if col_name in [
-            "thickness value",
-            "thickness"
-        ]:
+        # THICKNESS DETECTION
+        if (
+            "thickness" in col_name
+        ):
+
             thickness_col = col
 
+    # DEBUG OUTPUT
+    print("Detected Inch Dia Column:", inch_col)
+    print("Detected Thickness Column:", thickness_col)
+
     if inch_col is None:
-        raise Exception("Inch Dia column not found")
+
+        raise Exception(
+            f"""
+            Inch Dia column not found.
+
+            Available columns:
+            {list(welding_df.columns)}
+            """
+        )
 
     if thickness_col is None:
-        raise Exception("Thickness column not found")
+
+        raise Exception(
+            f"""
+            Thickness column not found.
+
+            Available columns:
+            {list(welding_df.columns)}
+            """
+        )
 
     # ---------------------------------------------------
     # READ MASTER FILE
