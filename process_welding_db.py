@@ -88,7 +88,9 @@ def process_file(welding_file):
 
         row_values = welding_df.iloc[idx].astype(str)
 
-        row_text = " ".join(row_values).lower()
+        row_text = " ".join(
+            [str(x) for x in row_values]
+            ).lower()
 
         if (
             "inch" in row_text
