@@ -64,18 +64,65 @@ def process_file(welding_file):
         welding_df = pd.read_excel(
             welding_file,
             sheet_name=0,
+            header=None,
             engine="pyxlsb"
+        )
         )
 
     else:
 
-        welding_df = pd.read_excel(
+         welding_df = pd.read_excel(
             welding_file,
             sheet_name=0,
+            header=None,
             engine="openpyxl"
         )
+        )
 
-    welding_df.columns = welding_df.columns.str.strip()
+        # ---------------------------------------------------
+    # AUTO DETECT HEADER ROW
+    # ---------------------------------------------------
+
+    header_row = None
+
+    for idx in range(min(20, len(welding_df))):
+
+        row_values = welding_df.iloc[idx].astype(str)
+
+        row_text = " ".join(row_values).lower()
+
+        if (
+            "inch" in row_text
+            and
+            "dia" in row_text
+        ):
+
+            header_row = idx
+            break
+
+    if header_row is None:
+
+        raise Exception(
+            "Could not detect header row"
+        )
+
+    # SET HEADERS
+
+    welding_df.columns = welding_df.iloc[
+        header_row
+    ]
+
+    welding_df = welding_df[
+        header_row + 1:
+    ].reset_index(drop=True)
+
+    welding_df.columns = [
+        str(col).strip()
+        for col in welding_df.columns
+    ]
+
+    print("DETECTED HEADERS:")
+    print(welding_df.columns.tolist())
 
     # ---------------------------------------------------
     # DYNAMIC COLUMN DETECTION
